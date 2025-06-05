@@ -144,6 +144,54 @@ class TestFlaskr:
             # the database state is not guaranteed. In a real-world scenario,
             # you might want to set up a known database state before running this test.
 
+    def test_remove_entry_unauthorized(self):
+        """
+        Test that unauthorized users cannot remove entries.
+        """
+        with app.test_client() as client:
+            # Try to remove an entry without being logged in
+            response = client.post('/remove/1', follow_redirects=True)
+            
+            # Check that the response status code is 401 (Unauthorized)
+            assert response.status_code == 401
+
+    def test_remove_entry_authorized(self):
+        """
+        Test that authorized users can remove entries.
+        """
+        with app.test_client() as client:
+            # First, log in
+            client.post('/login', data={
+                'username': app.config['USERNAME'],
+                'password': app.config['PASSWORD']
+            })
+            
+            # Add an entry to ensure there's something to delete
+            client.post('/add', data={
+                'title': 'Test Entry',
+                'text': 'This is a test entry to be deleted.'
+            })
+            
+            # Get the entries to find the ID of the entry we just added
+            with app.app_context():
+                db = get_db()
+                entry = db.execute('SELECT id FROM entries WHERE title = ?', ['Test Entry']).fetchone()
+                
+                if entry:
+                    # Remove the entry
+                    response = client.post(f'/remove/{entry["id"]}', follow_redirects=True)
+                    
+                    # Check that the response status code is 200 (OK)
+                    assert response.status_code == 200
+                    
+                    # Check that the flash message is displayed
+                    assert b'Entry was successfully deleted' in response.data
+                    
+                    # Check that the entry is no longer in the database
+                    deleted_entry = db.execute('SELECT * FROM entries WHERE id = ?', [entry["id"]]).fetchone()
+                    assert deleted_entry is None
+                else:
+                    assert False, "Failed to add test entry for deletion test"
 
 
 class AuthActions(object):
